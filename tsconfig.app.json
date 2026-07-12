@@ -1,0 +1,32 @@
+{
+  "compilerOptions": {
+    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.app.tsbuildinfo",
+    "target": "es2023",
+    "lib": ["ES2023", "DOM"],
+    "module": "esnext",
+    "types": ["vite/client"],
+    "strict": true,
+
+    /* @sgsg/design 는 `file:` 로 링크된 형제 저장소다. 심볼릭 링크를 따라가면 해석이
+       ../sgsg-design-guide 에서 시작하는데 거기엔 node_modules 가 없어서 react 타입이
+       안 잡힌다. 링크된 자리에서 해석하게 두면 우리 node_modules 를 그대로 쓴다. */
+    "preserveSymlinks": true,
+    "allowArbitraryExtensions": true,
+    "skipLibCheck": true,
+
+    /* Bundler mode */
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "verbatimModuleSyntax": true,
+    "moduleDetection": "force",
+    "noEmit": true,
+    "jsx": "react-jsx",
+
+    /* Linting */
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "erasableSyntaxOnly": true,
+    "noFallthroughCasesInSwitch": true
+  },
+  "include": ["src"]
+}
