@@ -9,6 +9,10 @@ const won = (n: number) => `${Math.round(n ?? 0).toLocaleString('ko-KR')}원`;
 type Summary = {
   queues: Record<string, number>;
   stats: Record<string, number>;
+  stuck: {
+    'oldest-unassigned': { id: string; 'order-number': string; days: number; 'customer-name': string }[];
+    'oldest-awaiting': { id: string; 'order-id': string; hours: number }[];
+  };
   recent: any[];
 };
 
@@ -69,6 +73,90 @@ export default function Dashboard() {
             </Card>
           ))}
         </div>
+      )}
+
+      {/* **얼마나 오래 멈춰 있나.**
+          건수만 보면 오늘 들어온 3건과 2주째 방치된 3건이 같아 보인다. 운영 회고가
+          지목한 것은 건수가 아니라 시간이었다 — 접수 후 연락까지 5~7일, 심하면 2~4주,
+          그리고 그게 취소와 클레임이 됐다. */}
+      {(d.stuck?.['oldest-unassigned']?.length > 0 ||
+        d.stuck?.['oldest-awaiting']?.length > 0) && (
+        <Card>
+          <div style={{ marginBottom: 12 }}>
+            <b>오래 멈춰 있는 것</b>
+            <div style={{ color: 'var(--color-contents-contents-sub)', fontSize: 13, marginTop: 2 }}>
+              기다리는 시간이 곧 취소와 클레임이 됩니다.
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {d.stuck['oldest-unassigned'].map((o) => {
+              // 회고가 기록한 실제 임계값. 5일을 넘기면 취소로 이어지기 시작했다.
+              const urgent = o.days >= 5;
+              return (
+                <div
+                  key={o.id}
+                  onClick={() => nav(`/orders/${o.id}`)}
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    padding: '10px 12px',
+                    borderRadius: 'var(--rd-12)',
+                    background: 'var(--color-background-elevation-2)',
+                    cursor: 'pointer',
+                  }}
+                >
+                  <span>
+                    {o['order-number']}
+                    <span style={{ marginLeft: 8, color: 'var(--color-contents-contents-sub)', fontSize: 13 }}>
+                      {o['customer-name'] ?? '-'} · 아직 배정 안 됨
+                    </span>
+                  </span>
+                  <b
+                    style={{
+                      color: urgent
+                        ? 'var(--color-individuals-danger)'
+                        : 'var(--color-contents-contents-sub)',
+                    }}
+                  >
+                    {o.days}일째
+                  </b>
+                </div>
+              );
+            })}
+
+            {d.stuck['oldest-awaiting'].map((a) => (
+              <div
+                key={a.id}
+                onClick={() => nav(`/orders/${a['order-id']}`)}
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  padding: '10px 12px',
+                  borderRadius: 'var(--rd-12)',
+                  background: 'var(--color-background-elevation-2)',
+                  cursor: 'pointer',
+                }}
+              >
+                <span style={{ color: 'var(--color-contents-contents-sub)' }}>
+                  전문가 응답 없음
+                </span>
+                <b
+                  style={{
+                    color:
+                      a.hours >= 24
+                        ? 'var(--color-individuals-danger)'
+                        : 'var(--color-contents-contents-sub)',
+                  }}
+                >
+                  {a.hours}시간째
+                </b>
+              </div>
+            ))}
+          </div>
+        </Card>
       )}
 
       {/* 배경 숫자. 할 일이 아니므로 작게, 아래에 둔다. */}

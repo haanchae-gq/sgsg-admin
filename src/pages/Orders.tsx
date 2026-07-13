@@ -1,10 +1,31 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Alert, Button, Card, Empty, Modal, Skeleton } from '@sgsg/design/components';
-import { api, ApiError, type Expert, type Order } from '../api';
+import { api, ApiError, type Candidate, type Order } from '../api';
 import { nextAction, paymentLabel, progressLabel, statusLabel } from '../status';
 
 const won = (n: number) => `${Math.round(n ?? 0).toLocaleString('ko-KR')}원`;
+
+const UNIT: Record<string, string> = {
+  wall: '벽걸이',
+  stand: '스탠드',
+  ceiling: '천장형',
+  system: '시스템에어컨',
+};
+
+/** 현장 조건을 사람이 읽는 말로. 배정 판단의 근거이므로 모달 맨 위에 둔다. */
+function siteChips(s: Record<string, any>): string[] {
+  const out: string[] = [];
+  if (s['unit-type']) out.push(UNIT[s['unit-type']] ?? s['unit-type']);
+  if (s['unit-count'] > 1) out.push(`${s['unit-count']}대`);
+  if (s.floor != null) out.push(`${s.floor}층${s.elevator === false ? ' (엘리베이터 없음)' : ''}`);
+  if (s.commercial) out.push('상업시설');
+  if (s.ceiling === 'high') out.push('고층고 (사다리 필요)');
+  if (s['soil-level'] === 'heavy') out.push('오염 심함');
+  if (s.parking === false) out.push('주차 불가');
+  if (s['distance-km'] != null) out.push(`${s['distance-km']}km`);
+  return out;
+}
 
 const FILTERS: { key: string; label: string; status?: string }[] = [
   { key: 'todo', label: '내 손이 필요한 것' },
@@ -27,8 +48,9 @@ export default function Orders() {
   const filter = params.get('status') ?? (params.get('view') ?? 'todo');
 
   const [orders, setOrders] = useState<Order[] | null>(null);
-  const [experts, setExperts] = useState<Expert[]>([]);
   const [assigning, setAssigning] = useState<Order | null>(null);
+  const [cands, setCands] = useState<Candidate[] | null>(null);
+  const [site, setSite] = useState<Record<string, unknown>>({});
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -58,9 +80,19 @@ export default function Orders() {
     void load();
   }, [load]);
 
+  // 후보는 주문마다 다르다. 모달을 열 때 그 주문으로 물어본다 —
+  // 전문가 전체를 미리 받아 두면 "누가 이 일을 할 수 있나"를 다시 화면에서 계산하게 된다.
   useEffect(() => {
-    api.experts({ 'active-status': 'active' }).then(setExperts).catch(() => undefined);
-  }, []);
+    if (!assigning) return;
+    setCands(null);
+    api
+      .candidates(assigning.id)
+      .then((d) => {
+        setCands(d.candidates);
+        setSite(d.site ?? {});
+      })
+      .catch(() => setCands([]));
+  }, [assigning]);
 
   async function check(o: Order) {
     setBusy(o.id);
@@ -188,45 +220,89 @@ export default function Orders() {
         open={assigning != null}
         onClose={() => setAssigning(null)}
         title="전문가 배정"
-        description={assigning ? `${assigning['service-name']} · ${assigning['customer-snapshot']?.address?.address1 ?? ''}` : ''}
+        description={
+          assigning
+            ? `${assigning['service-name']} · ${assigning['customer-snapshot']?.address?.address1 ?? ''}`
+            : ''
+        }
       >
-        {experts.length === 0 ? (
-          <Empty title="배정할 수 있는 전문가가 없어요." />
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 360, overflowY: 'auto' }}>
-            {experts.map((e) => (
-              <button
-                key={e.id}
-                type="button"
-                onClick={() => assign(e.id)}
-                disabled={busy != null}
+        {/* 현장 조건을 먼저 보여 준다. 왜 이 사람이 되고 저 사람이 안 되는지의 근거다. */}
+        {Object.keys(site).length > 0 && (
+          <div
+            style={{
+              display: 'flex',
+              flexWrap: 'wrap',
+              gap: 6,
+              marginBottom: 12,
+              fontSize: 13,
+            }}
+          >
+            {siteChips(site).map((t) => (
+              <span
+                key={t}
                 style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
+                  padding: '3px 10px',
+                  borderRadius: 999,
+                  background: 'var(--color-background-elevation-2)',
+                  color: 'var(--color-contents-contents-sub)',
+                }}
+              >
+                {t}
+              </span>
+            ))}
+          </div>
+        )}
+
+        {!cands && <Skeleton height="160px" />}
+        {cands?.length === 0 && <Empty title="등록된 전문가가 없어요." />}
+
+        {cands && cands.length > 0 && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 420, overflowY: 'auto' }}>
+            {cands.map((c) => (
+              <button
+                key={c['expert-id']}
+                type="button"
+                onClick={() => assign(c['expert-id'])}
+                disabled={busy != null}
+                title={c.available ? '' : '못 하는 이유가 있지만 배정할 수는 있어요'}
+                style={{
                   padding: '12px 14px',
                   borderRadius: 'var(--rd-12)',
                   border: '1px solid var(--color-divider-divider)',
-                  background: 'var(--color-background-elevation-1)',
+                  background: c.available
+                    ? 'var(--color-background-elevation-1)'
+                    : 'var(--color-background-elevation-2)',
                   color: 'var(--color-contents-contents)',
                   font: 'inherit',
                   cursor: 'pointer',
                   textAlign: 'left',
+                  // 못 하는 사람도 지우지 않는다. 흐리게 내려 둘 뿐이다 — 다른 후보가
+                  // 없을 때 운영자는 "사다리를 빌려서라도 가겠다"는 사람에게 전화할 수
+                  // 있어야 한다.
+                  opacity: c.available ? 1 : 0.6,
                 }}
               >
-                <span>
-                  <b>{e['business-info']?.['business-name'] ?? e.id}</b>
-                  <span style={{ marginLeft: 8, color: 'var(--color-contents-contents-sub)', fontSize: 13 }}>
-                    {e['service-info']?.['region-groups']?.join(', ') || '지역 미설정'}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <b>{c.name}</b>
+                  <span style={{ fontSize: 13, color: 'var(--color-contents-contents-sub)' }}>
+                    {c.region || '지역 미설정'}
+                    {c.rating != null ? ` · ★ ${c.rating.toFixed(1)}` : ' · 리뷰 없음'}
                   </span>
-                </span>
-                <span style={{ color: 'var(--color-contents-contents-sub)', fontSize: 13 }}>
-                  {/* 별점이 없는 것과 0점은 다른 얘기다. 신규 전문가를 0점으로 보여 주면
-                      아무도 그를 고르지 않는다. */}
-                  {e.rating != null ? `★ ${e.rating.toFixed(1)}` : '리뷰 없음'}
-                  {' · 진행 '}
-                  {e.statistics?.['total-servicing-orders'] ?? 0}건
-                </span>
+                </div>
+
+                {/* 왜 위에 있는지 / 왜 못 하는지. 점수만 보여 주면 아무도 못 믿는다. */}
+                <div style={{ marginTop: 6, display: 'flex', flexWrap: 'wrap', gap: 6, fontSize: 12 }}>
+                  {c.reasons.map((r) => (
+                    <span key={r} style={{ color: 'var(--color-primary-primary-text)' }}>
+                      + {r}
+                    </span>
+                  ))}
+                  {c.blockers.map((b) => (
+                    <span key={b.code} style={{ color: 'var(--color-individuals-danger)' }}>
+                      − {b.label}
+                    </span>
+                  ))}
+                </div>
               </button>
             ))}
           </div>

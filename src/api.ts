@@ -124,6 +124,17 @@ export type Expert = {
   statistics?: Record<string, number>;
 };
 
+export type Candidate = {
+  'expert-id': string;
+  name: string;
+  region: string;
+  rating?: number | null;
+  available: boolean;
+  score: number;
+  reasons: string[];
+  blockers: { code: string; label: string }[];
+};
+
 // --- 호출 ------------------------------------------------------------------
 
 export const api = {
@@ -150,6 +161,15 @@ export const api = {
 
   experts: async (f: Record<string, unknown> = {}): Promise<Expert[]> =>
     items(await send('GET', `/experts?${qs({ page: 1, limit: 200, ...f })}`)) as Expert[],
+
+  // 배정 후보. 기계가 좁히고 사람이 고른다 — 못 하는 사람도 이유와 함께 남는다.
+  candidates: (orderId: string): Promise<{
+    site: Record<string, unknown>;
+    candidates: Candidate[];
+  }> => send('GET', `/orders/${orderId}/candidates`),
+
+  onSitePolicies: async () => items(await send('GET', '/on-site-policies')),
+  setOnSitePolicy: (b: unknown) => send('POST', '/on-site-policies', b),
 
   assignments: async (f: Record<string, unknown> = {}) =>
     items(await send('GET', `/assignments?${qs({ page: 1, limit: 50, ...f })}`)),
