@@ -1,6 +1,8 @@
+import { useState } from 'react';
 import { BrowserRouter, Navigate, NavLink, Route, Routes, useNavigate } from 'react-router-dom';
 import { Button } from '@sgsg/design/components';
 import { api, isLoggedIn } from './api';
+import { applyTheme, currentTheme, type Theme } from './theme';
 import Dashboard from './pages/Dashboard';
 import Orders from './pages/Orders';
 import Assignments from './pages/Assignments';
@@ -29,6 +31,53 @@ const NAV = [
   { to: '/wisa', label: '위사몰' },
 ];
 
+const THEMES: { key: Theme; label: string }[] = [
+  { key: 'light', label: '라이트' },
+  { key: 'dark', label: '다크' },
+  { key: 'system', label: '시스템' },
+];
+
+/** 색을 손으로 고르지 않는다. `data-theme` 을 붙이고 떼면 토큰이 알아서 뒤집힌다. */
+function ThemeToggle() {
+  const [t, setT] = useState<Theme>(currentTheme());
+
+  return (
+    <div style={{ display: 'flex', gap: 4, padding: '0 4px', marginTop: 12 }}>
+      {THEMES.map((x) => (
+        <button
+          key={x.key}
+          type="button"
+          onClick={() => {
+            applyTheme(x.key);
+            setT(x.key);
+          }}
+          style={{
+            flex: 1,
+            padding: '6px 0',
+            fontSize: 12,
+            borderRadius: 'var(--rd-8)',
+            border: '1px solid var(--color-divider-divider)',
+            background:
+              t === x.key
+                ? 'var(--color-background-primary-elevation-1)'
+                : 'var(--color-background-elevation-1)',
+            // 연한 틴트 위의 글자는 primary-text 다. contents-on 은 브랜드 블루 면 위의 흰 글씨다.
+            color:
+              t === x.key
+                ? 'var(--color-primary-primary-text)'
+                : 'var(--color-contents-contents-sub)',
+            cursor: 'pointer',
+            font: 'inherit',
+            fontWeight: 600,
+          }}
+        >
+          {x.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 function Shell({ children }: { children: React.ReactNode }) {
   const nav = useNavigate();
 
@@ -43,7 +92,9 @@ function Shell({ children }: { children: React.ReactNode }) {
             {n.label}
           </NavLink>
         ))}
-        <div style={{ marginTop: 24, padding: '0 4px' }}>
+        <ThemeToggle />
+
+        <div style={{ marginTop: 12, padding: '0 4px' }}>
           <Button
             variant="ghost"
             size="s"

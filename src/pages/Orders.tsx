@@ -148,7 +148,7 @@ export default function Orders() {
                               padding: '2px 6px',
                               borderRadius: 999,
                               background: 'var(--color-background-primary-elevation-1)',
-                              color: 'var(--color-contents-contents-on)',
+                              color: 'var(--color-primary-primary-text)',
                             }}
                           >
                             위사몰
