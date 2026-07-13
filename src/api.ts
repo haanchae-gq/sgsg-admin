@@ -164,4 +164,56 @@ export const api = {
   wisaResync: (orderId: string) => send('POST', `/wisa/orders/${orderId}/resync`),
 
   services: async () => items(await send('GET', '/services/items?page=1&limit=200')),
+
+  // --- 전문가 ---
+  approveExpert: (id: string) => send('PATCH', `/experts/${id}/approve`),
+  // 백엔드 경로 이름은 reject 지만 화면에서는 '승인 안 함' 이다 —
+  // 서류가 모자란 것은 실패가 아니다 (용어 사전).
+  rejectExpert: (id: string, reason: string) =>
+    send('PATCH', `/experts/${id}/reject`, { reason }),
+
+  // --- 고객 ---
+  customers: async (f: Record<string, unknown> = {}) =>
+    items(await send('GET', `/customers?${qs({ page: 1, limit: 100, ...f })}`)),
+
+  // --- 서비스 카탈로그 ---
+  categories: async () => {
+    const d = await send('GET', '/services/categories');
+    return Array.isArray(d) ? d : items(d);
+  },
+  createItem: (b: unknown) => send('POST', '/services/items', b),
+  updateItem: (id: string, b: unknown) => send('PUT', `/services/items/${id}`, b),
+
+  // --- 결제 ---
+  payments: async (f: Record<string, unknown> = {}) =>
+    items(await send('GET', `/payments?${qs({ page: 1, limit: 100, ...f })}`)),
+  refund: (id: string, amount: number, reason: string) =>
+    send('POST', `/payments/${id}/refund`, { amount, reason }),
+
+  // --- 정산 ---
+  commissionPolicies: async () => items(await send('GET', '/commission-policies')),
+  setCommission: (scope: string, rate: number, scopeId?: string, note?: string) =>
+    // 화면은 %(0~50)로 다루고 서버에는 비율(0~0.5)로 보낸다. 사람은 20 을 입력하지
+    // 0.2 를 입력하지 않는다 — 그 변환을 사용자에게 시키면 언젠가 누군가 0.2 를
+    // 넣고 20% 를 뗐다고 믿는다.
+    send('POST', '/commission-policies', { scope, rate: rate / 100, 'scope-id': scopeId, note }),
+  settlements: async (f: Record<string, unknown> = {}) =>
+    items(await send('GET', `/settlements?${qs(f)}`)),
+  settlementPreview: (expertId: string, year: number, month: number) =>
+    send('GET', `/settlement-preview?${qs({ expertId, year, month })}`),
+  closeSettlement: (expertId: string, year: number, month: number) =>
+    send('POST', '/settlements', { 'expert-id': expertId, year, month }),
+  settlementAction: (id: string, action: 'approve' | 'pay' | 'cancel') =>
+    send('PATCH', `/settlements/${id}/${action}`),
+
+  // --- 리뷰 ---
+  reviews: async (f: Record<string, unknown> = {}) =>
+    items(await send('GET', `/admin/reviews?${qs({ page: 1, limit: 100, ...f })}`)),
+  blindReview: (id: string, reason: string) =>
+    send('POST', `/admin/reviews/${id}/blind`, { reason }),
+  unblindReview: (id: string) => send('POST', `/admin/reviews/${id}/unblind`),
+
+  // --- 문의 ---
+  inquiries: async (f: Record<string, unknown> = {}) =>
+    items(await send('GET', `/inquiries?${qs({ page: 1, limit: 100, ...f })}`)),
 };
