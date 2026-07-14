@@ -5,6 +5,7 @@ import { api, isLoggedIn } from './api';
 import { applyTheme, currentTheme, type Theme } from './theme';
 import Dashboard from './pages/Dashboard';
 import Orders from './pages/Orders';
+import Days from './pages/Days';
 import OrderDetail from './pages/OrderDetail';
 import OrderNew from './pages/OrderNew';
 import Assignments from './pages/Assignments';
@@ -22,6 +23,8 @@ import Login from './pages/Login';
 const NAV = [
   { to: '/', label: '오늘' },
   { to: '/orders', label: '주문' },
+  // ★ '하루' 를 주문 바로 옆에. 우리는 주문을 팔지 않는다 — 하루를 판다.
+  { to: '/days', label: '하루' },
   { to: '/assignments', label: '배정' },
   { to: '/experts', label: '전문가' },
   { to: '/customers', label: '고객' },
@@ -125,6 +128,9 @@ export default function App() {
         {/* 등록(literal)이 :id 보다 **먼저** 와야 한다 — 뒤에 두면 'new' 가 주문 id 로 잡힌다. */}
         <Route path="/orders/new" element={<Shell><OrderNew /></Shell>} />
         <Route path="/orders/:id" element={<Shell><OrderDetail /></Shell>} />
+        {/* ★ 하루 시장. 이 화면이 없어서 운영자는 주문을 낱개로 배정했고,
+            백엔드가 구조로 막은 편식을 운영 화면이 되살리고 있었다. */}
+        <Route path="/days" element={<Shell><Days /></Shell>} />
         <Route path="/assignments" element={<Shell><Assignments /></Shell>} />
         <Route path="/experts" element={<Shell><Experts /></Shell>} />
         <Route path="/customers" element={<Shell><Customers /></Shell>} />

@@ -151,6 +151,44 @@ export type Candidate = {
   };
 };
 
+export type DayStop = {
+  'order-id': string;
+  name?: string;
+  address?: string;
+  amount?: number;
+  'travel-km'?: number;
+  'travel-minutes'?: number;
+};
+
+export type DayMarketDate = {
+  date: string;
+  days: { orders: string[]; stops: DayStop[] }[];
+  /** ★ 단건은 '실패' 다. 이 숫자가 크면 물량이 얇다는 뜻이고, 그건 마케팅이 풀 문제다. */
+  singles: { id: string; 'service-name'?: string; address?: string; amount?: number }[];
+};
+
+export type DayCandidate = {
+  'expert-id': string;
+  name: string;
+  'commute-km'?: number | null;
+  'hourly-take'?: number | null;
+  take?: number;
+  available: boolean;
+  blockers: { code: string; label: string }[];
+  /** ★ 그가 이 하루를 원한다고 말했다. 운영자가 몰랐던 사실이다. */
+  'wants-it'?: boolean;
+  'wants-note'?: string | null;
+  cautions?: string[];
+  trust?: { 'enough-sample': boolean; label: string };
+};
+
+export type DayCandidates = {
+  orders: string[];
+  date: string;
+  stops: DayStop[];
+  candidates: DayCandidate[];
+};
+
 // --- 호출 ------------------------------------------------------------------
 
 export const api = {
@@ -248,6 +286,24 @@ export const api = {
     site: Record<string, unknown>;
     candidates: Candidate[];
   }> => send('GET', `/orders/${orderId}/candidates`),
+
+  // ---------------------------------------------------------------------------
+  // 하루 시장 — 우리는 주문을 팔지 않는다. 하루를 판다.
+  //
+  // ★ 이 호출들이 없어서 관리자는 하루를 팔 수 없었고, 주문을 낱개로 배정했다.
+  //   백엔드가 partition-pool 로 구조적으로 막아 둔 편식을 **운영 화면이 되살리고**
+  //   있었다: 25만원짜리 이사청소만 골라 배정하고 7.9만원 먼 건은 남는다.
+  // ---------------------------------------------------------------------------
+
+  dayMarket: (): Promise<{ market: DayMarketDate[] }> => send('GET', '/day-market'),
+
+  /** 이 하루를 **누가** 할 수 있나. 전문가앱과 방향이 반대다. */
+  dayCandidates: (orderIds: string[]): Promise<DayCandidates> =>
+    send('POST', '/day-market/candidates', { orderIds }),
+
+  /** 하루를 판다. **전부 아니면 전무** — 반쪽짜리 하루는 우리가 판 물건이 아니다. */
+  assignDay: (orderIds: string[], expertId: string) =>
+    send('POST', '/day-market/assign', { orderIds, expertId }),
 
   onSitePolicies: async () => items(await send('GET', '/on-site-policies')),
   setOnSitePolicy: (b: unknown) => send('POST', '/on-site-policies', b),
