@@ -94,7 +94,7 @@ export default function OrderDetail() {
         <Card>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
             {next && (
-              <Button disabled={busy} onClick={() => act(() => next.run(o.id))}>
+              <Button variant="primary" disabled={busy} onClick={() => act(() => next.run(o.id))}>
                 {next.label}
               </Button>
             )}

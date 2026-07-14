@@ -188,7 +188,7 @@ export default function OrderNew() {
         </div>
 
         <div style={{ marginTop: 16 }}>
-          <Button disabled={busy} onClick={submit}>
+          <Button variant="primary" disabled={busy} onClick={submit}>
             등록
           </Button>
         </div>
