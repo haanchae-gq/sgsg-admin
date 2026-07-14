@@ -20,14 +20,67 @@ function ExitCard({ e }: { e: ExitStats }) {
   const otherPct = Math.round((e['other-ratio'] ?? 0) * 100);
   return (
     <Card>
-      <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 12 }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
         <h2 style={{ fontSize: 16, fontWeight: 800, margin: 0 }}>최근 30일 이탈 {e.total}건</h2>
+
+        {/* ★ 노쇼는 통계 뒤에 숨기지 않는다. 이탈률은 통계지만 노쇼는 **사건**이다 —
+            한 번이라도 고객을 문 앞에서 기다리게 한 일은 따로 세서 눈에 띄게 둔다. */}
+        {(e['no-show'] ?? 0) > 0 && (
+          <span
+            style={{
+              fontSize: 12,
+              fontWeight: 800,
+              padding: '2px 8px',
+              borderRadius: 999,
+              background: 'var(--color-background-danger-elevation-1)',
+              color: 'var(--color-individuals-danger)',
+            }}
+          >
+            노쇼 {e['no-show']}건
+          </span>
+        )}
+
         {otherPct >= 20 && (
-          <span style={{ fontSize: 12, color: 'var(--color-status-warning)' }}>
+          <span style={{ fontSize: 12, color: 'var(--color-individuals-warning)' }}>
             기타 {otherPct}% — 분류표가 현실을 못 담고 있어요
           </span>
         )}
       </div>
+
+      {/* ★★ **언제 말했나.** 이게 없으면 3주 전 취소와 당일 잠수가 똑같은 1건이다.
+          백엔드는 이 값을 계산해서 API 로 내려주고 있었는데, 아무도 보지 않았다. */}
+      {(e['by-lead-time']?.length ?? 0) > 0 && (
+        <div style={{ marginBottom: 16 }}>
+          <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 6, color: 'var(--color-contents-contents-sub)' }}>
+            전문가는 언제 말했나 — 일찍 알수록 고객을 지킬 수 있어요
+          </div>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            {e['by-lead-time']!.map((b) => {
+              const bad = b.bucket.startsWith('노쇼') || b.bucket.startsWith('방문 시각');
+              return (
+                <span
+                  key={b.bucket}
+                  style={{
+                    fontSize: 12,
+                    padding: '4px 10px',
+                    borderRadius: 999,
+                    border: '1px solid var(--color-divider-divider)',
+                    background: bad
+                      ? 'var(--color-background-danger-elevation-1)'
+                      : 'var(--color-background-elevation-2)',
+                    color: bad
+                      ? 'var(--color-individuals-danger)'
+                      : 'var(--color-contents-contents-sub)',
+                    fontWeight: bad ? 800 : 500,
+                  }}
+                >
+                  {b.bucket} <b>{b.count}</b>
+                </span>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24 }}>
         <div>

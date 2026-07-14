@@ -178,6 +178,18 @@ export const api = {
   recallOrder: (id: string, r: ExitReason) => send('POST', `/orders/${id}/recall`, r),
   unassignOrder: (id: string, r: ExitReason) => send('PATCH', `/orders/${id}/unassign`, r),
 
+  /**
+   * ★ 노쇼 — 말없이 안 왔다.
+   *
+   * 이 호출이 없어서 `no-show` 는 **만들 수 있는 길이 없는 죽은 값**이었다. 운영자가
+   * 취소/회수로 처리했고, 그건 집계상 '주문 취소' 였다. 우리가 세지 않으니 데이터상
+   * 노쇼는 영원히 0건이었다.
+   *
+   * 운영자만 찍는다: 전문가가 자기 노쇼를 신고할 리 없다.
+   */
+  markNoShow: (id: string, detail?: string) =>
+    send('POST', `/orders/${id}/no-show`, { detail: detail ?? null }),
+
   // 주문의 나머지 여정. 이 버튼들이 옛 CLJS 관리자에만 있어서, React 관리자로는
   // 주문을 **끝까지 몰고 갈 수 없었다** — 배정까지 하고 나면 손을 뗄 수밖에 없었다.
   deliverOrder: (id: string) => send('POST', `/orders/${id}/deliver`),
@@ -325,6 +337,20 @@ export type ExitStats = {
   'other-ratio': number;
   'by-reason': { kind: string; party: string; code: string; label: string; count: number }[];
   'by-region': { region: string; count: number; top: string }[];
+  /**
+   * ★ 노쇼 건수.
+   *
+   * 이 값이 0 이면 이제 **'노쇼가 없다'** 는 뜻이다. 예전엔 '우리가 안 센다' 는 뜻이었다 —
+   * 노쇼를 만들 수 있는 코드 경로가 아예 없어서 데이터상 영원히 0건이었다.
+   */
+  'no-show'?: number;
+  /**
+   * 전문가 이탈을 **언제 말했는지**로 나눈 것.
+   *
+   * 3주 전 취소와 당일 잠수는 다른 사건이다. 이걸 안 보면 둘이 똑같은 1건이 되고,
+   * 그 지표로 벌점을 매기면 미리 알려 준 성실한 사람을 벌하고 사라지는 사람을 놓친다.
+   */
+  'by-lead-time'?: { bucket: string; count: number }[];
 };
 
 

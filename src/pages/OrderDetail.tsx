@@ -76,6 +76,9 @@ export default function OrderDetail() {
   const done = st === 'cancelled' || st === 'refunded' || st === 'purchase-confirmed';
   const assigned = Boolean((o as any)['expert-id']);
   const addr = (o as any)['service-address'] ?? {};
+  // 방문 시각이 지났나. 노쇼는 '안 온 것' 이라 시각이 지나야 성립한다.
+  const visit = (o as any)['confirmed-date'];
+  const visitPassed = visit ? new Date(visit).getTime() < Date.now() : false;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -133,6 +136,29 @@ export default function OrderDetail() {
             {assigned && st !== 'recalled' && (
               <Button variant="secondary" disabled={busy} onClick={() => setExit('recall')}>
                 회수
+              </Button>
+            )}
+
+            {/* ★ 노쇼 — 말없이 안 왔다.
+                방문 시각이 지난 배정 건에만 뜬다. 아직 오지도 않을 시각인데 노쇼를
+                찍을 수는 없다. 그리고 취소·회수와 **다른 버튼**이어야 한다 — 노쇼를
+                '취소' 로 처리하면 집계에서 사라지고, 우리는 다시 노쇼를 0건으로 센다. */}
+            {assigned && visitPassed && (
+              <Button
+                variant="danger"
+                disabled={busy}
+                onClick={() =>
+                  act(async () => {
+                    const d = window.prompt(
+                      '노쇼로 기록합니다. 무슨 일이 있었는지 적어 주세요 (고객 연락 내용 등)',
+                      '',
+                    );
+                    if (d == null) return;
+                    await api.markNoShow(o.id, d);
+                  })
+                }
+              >
+                노쇼 처리
               </Button>
             )}
             <Button variant="danger" disabled={busy} onClick={() => setExit('cancel')}>
