@@ -131,8 +131,19 @@ export type Candidate = {
   rating?: number | null;
   available: boolean;
   score: number;
+  /** 항상 온다(좌표를 알면). 먼 사람의 거리도 운영자는 알아야 한다. */
+  'distance-km'?: number | null;
   reasons: string[];
   blockers: { code: string; label: string }[];
+  /** 알고 하라는 것. blockers(못 하는 일)와 다르다 — 차단이 아니라 사실이다. */
+  cautions: string[];
+  trust?: {
+    'enough-sample': boolean;
+    label: string;
+    'drop-rate-pct'?: number;
+    'accept-rate-pct'?: number | null;
+    penalty?: number;
+  };
 };
 
 // --- 호출 ------------------------------------------------------------------
@@ -156,8 +167,25 @@ export const api = {
   checkOrder: (id: string) => send('PATCH', `/orders/${id}/check`),
   assignExpert: (id: string, expertId: string) =>
     send('POST', `/orders/${id}/assign`, { 'expert-id': expertId }),
-  cancelOrder: (id: string, reason: string) =>
-    send('PATCH', `/orders/${id}/cancel`, { reason }),
+  // 주문을 내보내는 세 길. **셀 수 있는 사유 없이는 못 나간다** —
+  // 자유 텍스트로만 남기던 시절에는 "어느 지역에서 왜 취소가 많은가"를 셀 수 없었다.
+  cancelOrder: (id: string, r: ExitReason) => send('POST', `/orders/${id}/cancel`, r),
+  recallOrder: (id: string, r: ExitReason) => send('POST', `/orders/${id}/recall`, r),
+  unassignOrder: (id: string, r: ExitReason) => send('PATCH', `/orders/${id}/unassign`, r),
+
+  // 화면이 코드를 지어내지 않게, 고를 수 있는 것을 서버가 준다.
+  /** 전문가별 신뢰 지표. 표본이 적으면 숫자 대신 '아직 판단하기 일러요' 가 온다. */
+  expertTrust: async (days = 90): Promise<ExpertTrust[]> =>
+    items(await send('GET', `/expert-trust?days=${days}`)) as ExpertTrust[],
+
+  /** 좌표 상태. 좌표 없는 주문은 거리·동선에서 조용히 빠진다 — 보이게 둔다. */
+  geocodeStatus: async (): Promise<{ orders: number; experts: number; geocoder: string }> =>
+    (await send('GET', '/geocode/status')) as { orders: number; experts: number; geocoder: string },
+  geocodeBackfill: async (limit = 100) => send('POST', `/geocode/backfill?limit=${limit}`),
+
+  exitCatalog: async (): Promise<ExitCatalog> => (await send('GET', '/exit-reasons/catalog')) as ExitCatalog,
+  exitStats: async (days = 30): Promise<ExitStats> =>
+    (await send('GET', `/exit-reasons/stats?days=${days}`)) as ExitStats,
 
   experts: async (f: Record<string, unknown> = {}): Promise<Expert[]> =>
     items(await send('GET', `/experts?${qs({ page: 1, limit: 200, ...f })}`)) as Expert[],
@@ -236,4 +264,36 @@ export const api = {
   // --- 문의 ---
   inquiries: async (f: Record<string, unknown> = {}) =>
     items(await send('GET', `/inquiries?${qs({ page: 1, limit: 100, ...f })}`)),
+};
+
+
+// ---------------------------------------------------------------------------
+// 이탈 사유
+// ---------------------------------------------------------------------------
+
+export type ExitReason = { party: string; code: string; detail?: string };
+
+export type ExitCatalog = {
+  kinds: { code: string; label: string }[];
+  parties: { code: string; label: string; reasons: { code: string; label: string }[] }[];
+};
+
+export type ExitStats = {
+  total: number;
+  /** 기타 비율. 이 숫자가 크면 분류표가 현실을 못 담고 있다는 뜻이다 — 우리가 고칠 신호. */
+  'other-ratio': number;
+  'by-reason': { kind: string; party: string; code: string; label: string; count: number }[];
+  'by-region': { region: string; count: number; top: string }[];
+};
+
+
+export type ExpertTrust = {
+  'expert-id': string;
+  name: string;
+  'enough-sample': boolean;
+  label: string;
+  'drop-rate-pct'?: number;
+  'accept-rate-pct'?: number | null;
+  'response-median-minutes'?: number | null;
+  penalty?: number;
 };

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Alert, Button, Card, Empty, Modal, Skeleton } from '@sgsg/design/components';
-import { api, ApiError, type Expert } from '../api';
+import { api, ApiError, type Expert, type ExpertTrust } from '../api';
 
 const GRADE: Record<string, string> = { basic: '일반', membership: '멤버십', master: '마스터' };
 
@@ -18,6 +18,9 @@ export default function Experts() {
   const filter = params.get('status') ?? 'pending';
 
   const [list, setList] = useState<Expert[] | null>(null);
+  // 신뢰 지표. **별점과 다른 것을 말한다** — 별점은 잘한 일의 기록이고, 이건 무른
+  // 일의 기록이다. 표본이 적으면 아무 말도 하지 않는다.
+  const [trust, setTrust] = useState<Record<string, ExpertTrust>>({});
   const [holding, setHolding] = useState<{ e: Expert; reason: string } | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -38,6 +41,14 @@ export default function Experts() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    api
+      .expertTrust(90)
+      .then((rows) => setTrust(Object.fromEntries(rows.map((r) => [r['expert-id'], r]))))
+      // 지표가 없어도 목록은 떠야 한다 — 곁다리가 본체를 막지 않는다.
+      .catch(() => {});
+  }, []);
 
   async function approve(e: Expert) {
     setBusy(e.id);
@@ -104,6 +115,7 @@ export default function Experts() {
                   <th>지역</th>
                   <th>등급</th>
                   <th>별점</th>
+                  <th>최근 90일</th>
                   <th className="sg-num">진행/완료</th>
                   <th>다음</th>
                 </tr>
@@ -118,6 +130,32 @@ export default function Experts() {
                     {/* 별점이 없는 것과 0점은 다른 얘기다. 신규 전문가를 0점으로
                         보여 주면 아무도 그를 고르지 않는다. */}
                     <td>{e.rating != null ? `★ ${e.rating.toFixed(1)}` : '리뷰 없음'}</td>
+
+                    {/* 무른 일의 기록. 표본이 적으면 숫자를 만들지 않는다 —
+                        '이탈률 50% (2건 중 1건)' 은 신참을 죽이는 숫자다. */}
+                    <td style={{ fontSize: 13 }}>
+                      {(() => {
+                        const t = trust[e.id];
+                        if (!t) return '-';
+                        if (!t['enough-sample'])
+                          return (
+                            <span style={{ color: 'var(--color-contents-contents-sub)' }}>
+                              {t.label}
+                            </span>
+                          );
+                        return (
+                          <span
+                            style={{
+                              color: (t.penalty ?? 0) > 0
+                                ? 'var(--color-status-warning)'
+                                : 'var(--color-contents-contents-sub)',
+                            }}
+                          >
+                            {t.label || '문제 없어요'}
+                          </span>
+                        );
+                      })()}
+                    </td>
                     <td className="sg-num">
                       {e.statistics?.['total-servicing-orders'] ?? 0} /{' '}
                       {e.statistics?.['total-completed-service-orders'] ?? 0}

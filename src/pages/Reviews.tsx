@@ -84,7 +84,7 @@ export default function Reviews() {
                 }}
               >
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ color: '#FAAD14', fontWeight: 700 }}>
+                  <span style={{ color: 'var(--color-individuals-warning)', fontWeight: 700 }}>
                     {'★'.repeat(r.rating)}
                     <span style={{ color: 'var(--color-divider-divider)' }}>{'★'.repeat(5 - r.rating)}</span>
                   </span>

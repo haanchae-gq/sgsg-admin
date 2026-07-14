@@ -1,10 +1,65 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Alert, Button, Card, Skeleton } from '@sgsg/design/components';
-import { api } from '../api';
+import { api, type ExitStats } from '../api';
 import { statusLabel } from '../status';
 
 const won = (n: number) => `${Math.round(n ?? 0).toLocaleString('ko-KR')}원`;
+
+/**
+ * 이탈 — 왜 나갔나.
+ *
+ * ★ 이 카드가 없으면 아무도 사유 코드를 정성껏 고르지 않는다. 자기가 고른 것이 어디에도
+ * 안 보이면 그건 그냥 폼 하나가 늘어난 것이다. **세는 화면이 있어야 고르는 일이 일이 된다.**
+ *
+ * '기타' 비율을 함께 보여 준다. 그 숫자가 크면 분류표가 현실을 못 담고 있다는 뜻이지
+ * 운영자가 게으른 것이 아니다 — 우리가 고칠 신호다.
+ */
+function ExitCard({ e }: { e: ExitStats }) {
+  if (e.total === 0) return null;
+  const otherPct = Math.round((e['other-ratio'] ?? 0) * 100);
+  return (
+    <Card>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 12 }}>
+        <h2 style={{ fontSize: 16, fontWeight: 800, margin: 0 }}>최근 30일 이탈 {e.total}건</h2>
+        {otherPct >= 20 && (
+          <span style={{ fontSize: 12, color: 'var(--color-status-warning)' }}>
+            기타 {otherPct}% — 분류표가 현실을 못 담고 있어요
+          </span>
+        )}
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24 }}>
+        <div>
+          <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 6, color: 'var(--color-contents-contents-sub)' }}>
+            왜 나갔나
+          </div>
+          {e['by-reason'].slice(0, 6).map((r) => (
+            <div key={`${r.party}-${r.code}-${r.kind}`} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, padding: '3px 0' }}>
+              <span>{r.label}</span>
+              <span style={{ fontWeight: 700 }}>{r.count}</span>
+            </div>
+          ))}
+        </div>
+
+        <div>
+          <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 6, color: 'var(--color-contents-contents-sub)' }}>
+            {/* 회고의 질문: "어느 지역에서 왜 취소가 많은가" */}
+            어느 지역에서
+          </div>
+          {e['by-region'].slice(0, 6).map((r) => (
+            <div key={r.region} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, padding: '3px 0', gap: 12 }}>
+              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {r.region} <span style={{ color: 'var(--color-contents-contents-sub)', fontSize: 12 }}>{r.top}</span>
+              </span>
+              <span style={{ fontWeight: 700 }}>{r.count}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </Card>
+  );
+}
 
 type Summary = {
   queues: Record<string, number>;
@@ -36,10 +91,18 @@ const QUEUES: { key: string; label: string; to: string; urgent?: boolean }[] = [
 export default function Dashboard() {
   const nav = useNavigate();
   const [d, setD] = useState<Summary | null>(null);
+  const [exit, setExit] = useState<ExitStats | null>(null);
+  // 좌표 없는 주문. **에러가 안 나서 아무도 모른다** — 그 주문은 거리 점수에서도
+  // 동선 제안에서도 조용히 빠진다.
+  const [geo, setGeo] = useState<{ orders: number; experts: number } | null>(null);
+  const [fixing, setFixing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     api.dashboard().then(setD).catch(() => setError('불러오지 못했어요.'));
+    // 이탈 집계가 없어도 대시보드는 떠야 한다 — 곁다리가 본체를 막지 않는다.
+    api.exitStats(30).then(setExit).catch(() => {});
+    api.geocodeStatus().then(setGeo).catch(() => {});
   }, []);
 
   if (error) return <Alert type="danger" title={error} />;
@@ -173,6 +236,35 @@ export default function Dashboard() {
           </Card>
         ))}
       </div>
+
+      {geo && (geo.orders > 0 || geo.experts > 0) && (
+        <Alert
+          type="warning"
+          title={`주소 좌표가 없는 주문 ${geo.orders}건${geo.experts > 0 ? `, 전문가 ${geo.experts}명` : ''}`}
+          description="좌표가 없으면 거리 점수와 동선 제안에서 조용히 빠집니다. 눌러서 채우세요."
+        />
+      )}
+      {geo && (geo.orders > 0 || geo.experts > 0) && (
+        <div>
+          <Button
+            size="s"
+            loading={fixing}
+            onClick={async () => {
+              setFixing(true);
+              try {
+                await api.geocodeBackfill(200);
+                setGeo(await api.geocodeStatus());
+              } finally {
+                setFixing(false);
+              }
+            }}
+          >
+            좌표 채우기
+          </Button>
+        </div>
+      )}
+
+      {exit && <ExitCard e={exit} />}
 
       <Card>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>

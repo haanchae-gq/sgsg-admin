@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Alert, Button, Card, Empty, Modal, Skeleton } from '@sgsg/design/components';
-import { api, ApiError, type Candidate, type Order } from '../api';
+import { api, ApiError, type Candidate, type ExitReason, type Order } from '../api';
+import { ExitReasonModal } from '../ExitReasonModal';
 import { nextAction, paymentLabel, progressLabel, statusLabel } from '../status';
 
 const won = (n: number) => `${Math.round(n ?? 0).toLocaleString('ko-KR')}원`;
@@ -53,6 +54,8 @@ export default function Orders() {
   const [site, setSite] = useState<Record<string, unknown>>({});
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // 주문을 내보내는 세 길. 어느 길로 나가든 **셀 수 있는 사유**를 남긴다.
+  const [exiting, setExiting] = useState<{ order: Order; kind: 'cancel' | 'recall' | 'unassigned' } | null>(null);
 
   const load = useCallback(async () => {
     setOrders(null);
@@ -120,6 +123,15 @@ export default function Orders() {
     } finally {
       setBusy(null);
     }
+  }
+
+  async function exitOrder(r: ExitReason) {
+    if (!exiting) return;
+    const { order, kind } = exiting;
+    if (kind === 'cancel') await api.cancelOrder(order.id, r);
+    else if (kind === 'recall') await api.recallOrder(order.id, r);
+    else await api.unassignOrder(order.id, r);
+    await load();
   }
 
   return (
@@ -206,6 +218,28 @@ export default function Orders() {
                           </Button>
                         )}
                         {!na && <span style={{ color: 'var(--color-contents-contents-sub)' }}>—</span>}
+
+                        {/* 살아 있는 주문은 언제든 나갈 수 있다. 다만 이유 없이는 못 나간다. */}
+                        {!['cancelled', 'purchase-confirmed'].includes(o.status) && (
+                          <span style={{ marginLeft: 6, display: 'inline-flex', gap: 6 }}>
+                            {o['expert-id'] && (
+                              <Button
+                                size="s"
+                                variant="secondary"
+                                onClick={() => setExiting({ order: o, kind: 'recall' })}
+                              >
+                                회수
+                              </Button>
+                            )}
+                            <Button
+                              size="s"
+                              variant="secondary"
+                              onClick={() => setExiting({ order: o, kind: 'cancel' })}
+                            >
+                              취소
+                            </Button>
+                          </span>
+                        )}
                       </td>
                     </tr>
                   );
@@ -215,6 +249,18 @@ export default function Orders() {
           </div>
         )}
       </Card>
+
+      <ExitReasonModal
+        open={exiting != null}
+        kind={exiting?.kind ?? 'cancel'}
+        orderLabel={
+          exiting
+            ? `${exiting.order['service-name'] ?? ''} · ${exiting.order['customer-snapshot']?.['customer-name'] ?? ''}`
+            : ''
+        }
+        onClose={() => setExiting(null)}
+        onDone={exitOrder}
+      />
 
       <Modal
         open={assigning != null}
@@ -285,6 +331,7 @@ export default function Orders() {
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <b>{c.name}</b>
                   <span style={{ fontSize: 13, color: 'var(--color-contents-contents-sub)' }}>
+                    {c['distance-km'] != null ? `${c['distance-km']}km · ` : ''}
                     {c.region || '지역 미설정'}
                     {c.rating != null ? ` · ★ ${c.rating.toFixed(1)}` : ' · 리뷰 없음'}
                   </span>
@@ -300,6 +347,13 @@ export default function Orders() {
                   {c.blockers.map((b) => (
                     <span key={b.code} style={{ color: 'var(--color-individuals-danger)' }}>
                       − {b.label}
+                    </span>
+                  ))}
+                  {/* 경고는 차단이 아니다. 자주 무르는 사람에게도 일을 줘야 할 때가
+                      있고, 그 판단은 사람이 한다 — 우리는 사실만 올린다. */}
+                  {(c.cautions ?? []).map((w) => (
+                    <span key={w} style={{ color: 'var(--color-status-warning)' }}>
+                      ⚠ {w}
                     </span>
                   ))}
                 </div>
