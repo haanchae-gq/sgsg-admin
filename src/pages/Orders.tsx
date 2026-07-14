@@ -1,32 +1,15 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Alert, Button, Card, Empty, Modal, Skeleton } from '@sgsg/design/components';
-import { api, ApiError, type Candidate, type ExitReason, type Order } from '../api';
+import { Alert, Button, Card, Empty, Skeleton } from '@sgsg/design/components';
+import { api, ApiError, type ExitReason, type Order } from '../api';
 import { ExitReasonModal } from '../ExitReasonModal';
+import AssignModal from '../AssignModal';
 import { nextAction, paymentLabel, progressLabel, statusLabel } from '../status';
 
 const won = (n: number) => `${Math.round(n ?? 0).toLocaleString('ko-KR')}원`;
 
-const UNIT: Record<string, string> = {
-  wall: '벽걸이',
-  stand: '스탠드',
-  ceiling: '천장형',
-  system: '시스템에어컨',
-};
-
-/** 현장 조건을 사람이 읽는 말로. 배정 판단의 근거이므로 모달 맨 위에 둔다. */
-function siteChips(s: Record<string, any>): string[] {
-  const out: string[] = [];
-  if (s['unit-type']) out.push(UNIT[s['unit-type']] ?? s['unit-type']);
-  if (s['unit-count'] > 1) out.push(`${s['unit-count']}대`);
-  if (s.floor != null) out.push(`${s.floor}층${s.elevator === false ? ' (엘리베이터 없음)' : ''}`);
-  if (s.commercial) out.push('상업시설');
-  if (s.ceiling === 'high') out.push('고층고 (사다리 필요)');
-  if (s['soil-level'] === 'heavy') out.push('오염 심함');
-  if (s.parking === false) out.push('주차 불가');
-  if (s['distance-km'] != null) out.push(`${s['distance-km']}km`);
-  return out;
-}
+// 현장 조건(UNIT·siteChips)은 AssignModal 로 옮겼다 — 배정 화면이 두 벌이면
+// 언젠가 한쪽만 고쳐진다.
 
 const FILTERS: { key: string; label: string; status?: string }[] = [
   { key: 'todo', label: '내 손이 필요한 것' },
@@ -50,8 +33,6 @@ export default function Orders() {
 
   const [orders, setOrders] = useState<Order[] | null>(null);
   const [assigning, setAssigning] = useState<Order | null>(null);
-  const [cands, setCands] = useState<Candidate[] | null>(null);
-  const [site, setSite] = useState<Record<string, unknown>>({});
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   // 주문을 내보내는 세 길. 어느 길로 나가든 **셀 수 있는 사유**를 남긴다.
@@ -83,19 +64,6 @@ export default function Orders() {
     void load();
   }, [load]);
 
-  // 후보는 주문마다 다르다. 모달을 열 때 그 주문으로 물어본다 —
-  // 전문가 전체를 미리 받아 두면 "누가 이 일을 할 수 있나"를 다시 화면에서 계산하게 된다.
-  useEffect(() => {
-    if (!assigning) return;
-    setCands(null);
-    api
-      .candidates(assigning.id)
-      .then((d) => {
-        setCands(d.candidates);
-        setSite(d.site ?? {});
-      })
-      .catch(() => setCands([]));
-  }, [assigning]);
 
   async function check(o: Order) {
     setBusy(o.id);
@@ -105,21 +73,6 @@ export default function Orders() {
       await load();
     } catch (e) {
       setError(e instanceof ApiError ? e.message : '검수하지 못했어요.');
-    } finally {
-      setBusy(null);
-    }
-  }
-
-  async function assign(expertId: string) {
-    if (!assigning) return;
-    setBusy(assigning.id);
-    setError(null);
-    try {
-      await api.assignExpert(assigning.id, expertId);
-      setAssigning(null);
-      await load();
-    } catch (e) {
-      setError(e instanceof ApiError ? e.message : '배정하지 못했어요.');
     } finally {
       setBusy(null);
     }
@@ -136,7 +89,13 @@ export default function Orders() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      <h1 style={{ fontSize: 22, fontWeight: 800, margin: 0 }}>주문</h1>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <h1 style={{ fontSize: 22, fontWeight: 800, margin: 0 }}>주문</h1>
+        {/* 전화로 들어오는 건이 남는다. 넣을 데가 없으면 운영자는 주문을 못 받는다. */}
+        <Button size="s" onClick={() => nav('/orders/new')}>
+          주문 등록
+        </Button>
+      </div>
 
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
         {FILTERS.map((f) => (
@@ -262,106 +221,17 @@ export default function Orders() {
         onDone={exitOrder}
       />
 
-      <Modal
-        open={assigning != null}
-        onClose={() => setAssigning(null)}
-        title="전문가 배정"
-        description={
-          assigning
-            ? `${assigning['service-name']} · ${assigning['customer-snapshot']?.address?.address1 ?? ''}`
-            : ''
-        }
-      >
-        {/* 현장 조건을 먼저 보여 준다. 왜 이 사람이 되고 저 사람이 안 되는지의 근거다. */}
-        {Object.keys(site).length > 0 && (
-          <div
-            style={{
-              display: 'flex',
-              flexWrap: 'wrap',
-              gap: 6,
-              marginBottom: 12,
-              fontSize: 13,
-            }}
-          >
-            {siteChips(site).map((t) => (
-              <span
-                key={t}
-                style={{
-                  padding: '3px 10px',
-                  borderRadius: 999,
-                  background: 'var(--color-background-elevation-2)',
-                  color: 'var(--color-contents-contents-sub)',
-                }}
-              >
-                {t}
-              </span>
-            ))}
-          </div>
-        )}
-
-        {!cands && <Skeleton height="160px" />}
-        {cands?.length === 0 && <Empty title="등록된 전문가가 없어요." />}
-
-        {cands && cands.length > 0 && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 420, overflowY: 'auto' }}>
-            {cands.map((c) => (
-              <button
-                key={c['expert-id']}
-                type="button"
-                onClick={() => assign(c['expert-id'])}
-                disabled={busy != null}
-                title={c.available ? '' : '못 하는 이유가 있지만 배정할 수는 있어요'}
-                style={{
-                  padding: '12px 14px',
-                  borderRadius: 'var(--rd-12)',
-                  border: '1px solid var(--color-divider-divider)',
-                  background: c.available
-                    ? 'var(--color-background-elevation-1)'
-                    : 'var(--color-background-elevation-2)',
-                  color: 'var(--color-contents-contents)',
-                  font: 'inherit',
-                  cursor: 'pointer',
-                  textAlign: 'left',
-                  // 못 하는 사람도 지우지 않는다. 흐리게 내려 둘 뿐이다 — 다른 후보가
-                  // 없을 때 운영자는 "사다리를 빌려서라도 가겠다"는 사람에게 전화할 수
-                  // 있어야 한다.
-                  opacity: c.available ? 1 : 0.6,
-                }}
-              >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <b>{c.name}</b>
-                  <span style={{ fontSize: 13, color: 'var(--color-contents-contents-sub)' }}>
-                    {c['distance-km'] != null ? `${c['distance-km']}km · ` : ''}
-                    {c.region || '지역 미설정'}
-                    {c.rating != null ? ` · ★ ${c.rating.toFixed(1)}` : ' · 리뷰 없음'}
-                  </span>
-                </div>
-
-                {/* 왜 위에 있는지 / 왜 못 하는지. 점수만 보여 주면 아무도 못 믿는다. */}
-                <div style={{ marginTop: 6, display: 'flex', flexWrap: 'wrap', gap: 6, fontSize: 12 }}>
-                  {c.reasons.map((r) => (
-                    <span key={r} style={{ color: 'var(--color-primary-primary-text)' }}>
-                      + {r}
-                    </span>
-                  ))}
-                  {c.blockers.map((b) => (
-                    <span key={b.code} style={{ color: 'var(--color-individuals-danger)' }}>
-                      − {b.label}
-                    </span>
-                  ))}
-                  {/* 경고는 차단이 아니다. 자주 무르는 사람에게도 일을 줘야 할 때가
-                      있고, 그 판단은 사람이 한다 — 우리는 사실만 올린다. */}
-                  {(c.cautions ?? []).map((w) => (
-                    <span key={w} style={{ color: 'var(--color-status-warning)' }}>
-                      ⚠ {w}
-                    </span>
-                  ))}
-                </div>
-              </button>
-            ))}
-          </div>
-        )}
-      </Modal>
+      {assigning && (
+        <AssignModal
+          orderId={assigning.id}
+          description={`${assigning['service-name']} · ${assigning['customer-snapshot']?.address?.address1 ?? ''}`}
+          onClose={() => setAssigning(null)}
+          onDone={() => {
+            setAssigning(null);
+            void load();
+          }}
+        />
+      )}
     </div>
   );
 }

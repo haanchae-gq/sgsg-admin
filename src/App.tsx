@@ -5,6 +5,8 @@ import { api, isLoggedIn } from './api';
 import { applyTheme, currentTheme, type Theme } from './theme';
 import Dashboard from './pages/Dashboard';
 import Orders from './pages/Orders';
+import OrderDetail from './pages/OrderDetail';
+import OrderNew from './pages/OrderNew';
 import Assignments from './pages/Assignments';
 import Experts from './pages/Experts';
 import Customers from './pages/Customers';
@@ -120,6 +122,9 @@ export default function App() {
         <Route path="/login" element={<Login />} />
         <Route path="/" element={<Shell><Dashboard /></Shell>} />
         <Route path="/orders" element={<Shell><Orders /></Shell>} />
+        {/* 등록(literal)이 :id 보다 **먼저** 와야 한다 — 뒤에 두면 'new' 가 주문 id 로 잡힌다. */}
+        <Route path="/orders/new" element={<Shell><OrderNew /></Shell>} />
+        <Route path="/orders/:id" element={<Shell><OrderDetail /></Shell>} />
         <Route path="/assignments" element={<Shell><Assignments /></Shell>} />
         <Route path="/experts" element={<Shell><Experts /></Shell>} />
         <Route path="/customers" element={<Shell><Customers /></Shell>} />

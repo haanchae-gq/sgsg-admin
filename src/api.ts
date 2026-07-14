@@ -131,8 +131,13 @@ export type Candidate = {
   rating?: number | null;
   available: boolean;
   score: number;
-  /** 항상 온다(좌표를 알면). 먼 사람의 거리도 운영자는 알아야 한다. */
+  /** 배정에 **실제로 쓰인** 거리. 그날 이미 근처에 가면 hop-km 이고, 아니면 base-km 이다. */
   'distance-km'?: number | null;
+  /** 사업장에서의 거리. 변하지 않는 사실 — 그날 일정이 깨지면 이 값으로 되돌아간다. */
+  'base-km'?: number | null;
+  /** 그날 직전 현장에서의 거리. **다른 플랫폼은 이 값을 모른다.** */
+  'hop-km'?: number | null;
+  'hop-from'?: string | null;
   reasons: string[];
   blockers: { code: string; label: string }[];
   /** 알고 하라는 것. blockers(못 하는 일)와 다르다 — 차단이 아니라 사실이다. */
@@ -172,6 +177,42 @@ export const api = {
   cancelOrder: (id: string, r: ExitReason) => send('POST', `/orders/${id}/cancel`, r),
   recallOrder: (id: string, r: ExitReason) => send('POST', `/orders/${id}/recall`, r),
   unassignOrder: (id: string, r: ExitReason) => send('PATCH', `/orders/${id}/unassign`, r),
+
+  // 주문의 나머지 여정. 이 버튼들이 옛 CLJS 관리자에만 있어서, React 관리자로는
+  // 주문을 **끝까지 몰고 갈 수 없었다** — 배정까지 하고 나면 손을 뗄 수밖에 없었다.
+  deliverOrder: (id: string) => send('POST', `/orders/${id}/deliver`),
+  autoAssign: (id: string) => send('POST', `/orders/${id}/auto-assign`),
+  startOrder: (id: string) => send('PATCH', `/orders/${id}/start`),
+  completeOrder: (id: string) => send('PATCH', `/orders/${id}/complete`),
+  confirmOrder: (id: string) => send('PATCH', `/orders/${id}/confirm`),
+  setProgress: (id: string, to: string) => send('PATCH', `/orders/${id}/progress`, { to }),
+  addNote: (id: string, note: string) => send('POST', `/orders/${id}/notes`, { note }),
+
+  /** 손으로 접수한 주문. 전화·카톡으로 들어온 건은 여전히 사람이 넣는다. */
+  createOrder: (b: unknown) => send('POST', '/orders', b),
+
+  /**
+   * 주문에는 **고객이 먼저 있어야 한다** (orders.customer_id 는 NOT NULL).
+   *
+   * ★ 옛 CLJS 등록 화면은 이 단계를 `:orders/create-or-find-customer` 라는 이벤트에
+   * 맡겼는데 **그 이벤트는 어디에도 등록돼 있지 않았다.** re-frame 은 없는 이벤트를
+   * 조용히 무시한다 — 그래서 등록 버튼을 눌러도 아무 일도 일어나지 않았다. 즉 그 화면은
+   * 처음부터 동작하지 않았고, 아무도 몰랐다.
+   *
+   * 전화번호로 찾고, 없으면 만든다. 같은 번호로 다시 걸어 온 고객이 매번 새 사람이
+   * 되면 이력이 흩어진다.
+   */
+  createOrFindCustomer: async (name: string, phone: string): Promise<string> => {
+    const found = items(await send('GET', `/customers?${qs({ page: 1, limit: 1, search: phone })}`)) as any[];
+    const hit = found.find((c) => (c['primary-phone'] ?? '').replace(/\D/g, '') === phone.replace(/\D/g, ''));
+    if (hit?.id) return hit.id;
+    const made: any = await send('POST', '/customers', {
+      'customer-name': name,
+      'primary-phone': phone,
+    });
+    if (!made?.id) throw new ApiError(500, '고객을 만들지 못했어요.');
+    return made.id;
+  },
 
   // 화면이 코드를 지어내지 않게, 고를 수 있는 것을 서버가 준다.
   /** 전문가별 신뢰 지표. 표본이 적으면 숫자 대신 '아직 판단하기 일러요' 가 온다. */
