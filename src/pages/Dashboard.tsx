@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Alert, Button, Card, Skeleton } from '@sgsg/design/components';
-import { api, type ExitStats } from '../api';
+import { api, type ExitStats, type RiskItem } from '../api';
 import { statusLabel } from '../status';
 
 const won = (n: number) => `${Math.round(n ?? 0).toLocaleString('ko-KR')}원`;
@@ -148,6 +148,9 @@ export default function Dashboard() {
   // 좌표 없는 주문. **에러가 안 나서 아무도 모른다** — 그 주문은 거리 점수에서도
   // 동선 제안에서도 조용히 빠진다.
   const [geo, setGeo] = useState<{ orders: number; experts: number } | null>(null);
+  // ★ 지금 전화할 목록 — 물어봤는데 답이 없고 방문이 임박한 예약. 자동화보다 먼저
+  //   값어치가 나오는 것. 침묵을 눈에 보이게 만드는 것만으로 노쇼를 줄인다.
+  const [risks, setRisks] = useState<RiskItem[]>([]);
   const [fixing, setFixing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -156,6 +159,7 @@ export default function Dashboard() {
     // 이탈 집계가 없어도 대시보드는 떠야 한다 — 곁다리가 본체를 막지 않는다.
     api.exitStats(30).then(setExit).catch(() => {});
     api.geocodeStatus().then(setGeo).catch(() => {});
+    api.riskBoard().then((r) => setRisks(r.items ?? [])).catch(() => {});
   }, []);
 
   if (error) return <Alert type="danger" title={error} />;
@@ -166,6 +170,78 @@ export default function Dashboard() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
       <h1 style={{ fontSize: 22, fontWeight: 800, margin: 0 }}>오늘</h1>
+
+      {/* ★★ 지금 전화할 목록. 방문이 코앞인데 전문가가 아직 '간다' 고 안 한 예약.
+          이게 가장 위에 있어야 한다 — 몇 시간 뒤면 노쇼가 될 수 있는 것들이다. */}
+      {risks.length > 0 && (
+        <Card style={{ borderColor: 'var(--color-individuals-danger)' }}>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 10 }}>
+            <h2 style={{ fontSize: 16, fontWeight: 800, margin: 0 }}>
+              지금 확인 전화할 곳 {risks.length}건
+            </h2>
+            <span style={{ fontSize: 12, color: 'var(--color-contents-contents-sub)' }}>
+              24시간 안에 방문인데 아직 '간다'는 답이 없어요
+            </span>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {risks.map((r) => (
+              <div
+                key={r['order-id']}
+                onClick={() => nav(`/orders/${r['order-id']}`)}
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  gap: 12,
+                  padding: '8px 10px',
+                  borderRadius: 'var(--rd-8)',
+                  background: 'var(--color-background-elevation-2)',
+                  cursor: 'pointer',
+                }}
+              >
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontWeight: 700, fontSize: 14 }}>
+                    {r['service-name']}
+                    <span style={{ fontWeight: 400, color: 'var(--color-contents-contents-sub)' }}>
+                      {' · '}
+                      {r['confirmed-date']
+                        ? new Date(r['confirmed-date']).toLocaleString('ko-KR', {
+                            month: 'numeric',
+                            day: 'numeric',
+                            hour: '2-digit',
+                            minute: '2-digit',
+                          })
+                        : ''}
+                    </span>
+                  </div>
+                  <div style={{ fontSize: 12, color: 'var(--color-contents-contents-sub)' }}>
+                    {r['expert-name'] ?? '전문가'} 담당
+                    {/* 물어보긴 했나(침묵), 아직 안 물어봤나 — 다른 상태다. */}
+                    {r.asked ? ' · 확인 요청했지만 무응답' : ' · 아직 확인 요청 전'}
+                  </div>
+                </div>
+                {r['customer-phone'] && (
+                  <a
+                    href={`tel:${r['customer-phone']}`}
+                    onClick={(ev) => ev.stopPropagation()}
+                    style={{
+                      flexShrink: 0,
+                      fontSize: 13,
+                      fontWeight: 700,
+                      padding: '6px 12px',
+                      borderRadius: 'var(--rd-8)',
+                      background: 'var(--color-primary-primary-surface)',
+                      color: 'var(--color-contents-contents-on)',
+                    }}
+                  >
+                    고객에게 전화
+                  </a>
+                )}
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
 
       {todo.length === 0 ? (
         <Alert type="success" title="밀린 일이 없어요." description="새 주문이 들어오면 여기 뜹니다." />

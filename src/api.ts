@@ -189,6 +189,17 @@ export type DayCandidates = {
   candidates: DayCandidate[];
 };
 
+export type RiskItem = {
+  'order-id': string;
+  'service-name'?: string;
+  'confirmed-date'?: string;
+  'expert-name'?: string;
+  'customer-name'?: string;
+  'customer-phone'?: string;
+  /** 물어보긴 했나 (침묵), 아니면 아직 안 물어봤나 */
+  asked: boolean;
+};
+
 // --- 호출 ------------------------------------------------------------------
 
 export const api = {
@@ -296,6 +307,14 @@ export const api = {
   // ---------------------------------------------------------------------------
 
   dayMarket: (): Promise<{ market: DayMarketDate[] }> => send('GET', '/day-market'),
+
+  /**
+   * ★ 지금 전화할 목록 — 물어봤는데 답이 없고 방문이 24시간 안으로 다가온 예약.
+   *
+   * 알림톡을 한 통도 안 보내고도 이 목록만으로 노쇼를 줄인다. 침묵을 눈에 보이게 하는
+   * 것만으로.
+   */
+  riskBoard: (): Promise<{ items: RiskItem[] }> => send('GET', '/confirmations/risk-board'),
 
   /** 이 하루를 **누가** 할 수 있나. 전문가앱과 방향이 반대다. */
   dayCandidates: (orderIds: string[]): Promise<DayCandidates> =>
